@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gilgit-Baltistan Tourist Guide Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.45 Georgia,"Times New Roman",serif;color:#17262b;display:flex}
+#side{width:350px;flex:none;display:flex;flex-direction:column;background:#f6f9f8;border-right:1px solid #cfdad8;overflow:hidden}
+#map{flex:1;min-height:100%}
+header{padding:14px 16px 6px}
+h1{font-size:1.25rem;margin:0}
+.sec{padding:8px 16px;border-bottom:1px solid #dbe4e2}
+input,select,button{font:inherit;font-size:.92rem}
+input,select{width:100%;padding:7px 9px;border:1px solid #b9c8c5;border-radius:6px;background:#fff;color:inherit}
+label{display:block;font-size:.82rem;color:#4d6166;margin:6px 0 2px}
+.row{display:flex;gap:6px;margin-top:8px}
+button{padding:7px 12px;border:1px solid #17262b;background:#17262b;color:#fff;border-radius:6px;cursor:pointer}
+button.alt{background:#fff;color:#17262b}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #2a7fa8;outline-offset:1px}
+#cats{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+#cats button{padding:3px 10px;font-size:.82rem;background:#fff;color:#17262b;border-color:#b9c8c5;border-radius:999px}
+#cats button.on{background:#17262b;color:#fff}
+#list{flex:1;overflow:auto}
+.item{display:flex;gap:8px;align-items:center;width:100%;text-align:left;background:none;border:0;color:inherit;border-radius:0;padding:7px 16px}
+.item:hover{background:#e6eeec}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+#msg{font-size:.88rem;margin-top:8px;min-height:1.2em}
+.err{color:#b02a2a}
+.leaflet-popup-content button{margin:4px 4px 0 0;padding:4px 8px;font-size:.8rem}
+.leaflet-routing-container{display:none}
+@media(max-width:800px){
+ body{flex-direction:column-reverse}
+ #side{width:100%;height:48vh;border-right:0;border-top:1px solid #cfdad8}
+ #map{height:52vh;min-height:0}
+}
+</style>
+</head>
+<body>
+<aside id="side">
+ <header><h1>Gilgit-Baltistan tourist guide</h1></header>
+ <div class="sec">
+  <label for="q">Search places</label>
+  <input id="q" type="search" placeholder="Type a name, press Enter to search the wider map">
+  <div id="cats"></div>
+ </div>
+ <div class="sec">
+  <label for="from">Route from</label>
+  <select id="from"></select>
+  <label for="to">Route to</label>
+  <select id="to"></select>
+  <div class="row"><button id="go">Get route</button><button id="clr" class="alt">Clear</button></div>
+  <div id="msg" role="status"></div>
+ </div>
+ <div id="list"></div>
+</aside>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+<script>
+// ---- Data: edit or extend this list. [name, category, lat, lng, description, best time]
+var CATS = {lake:["Lakes and meadows","#2a7fa8"],peak:["Peaks and base camps","#7a4b8c"],culture:["Forts and heritage","#b5651d"],nature:["Valleys and parks","#2f7d4f"],pass:["Passes","#c23b3b"]};
+var PLACES = [
+["Baltit Fort, Karimabad","culture",36.32,74.66,"Hunza's 700-year-old fort above Karimabad, with views of Rakaposhi and Ultar Sar.","April to October"],
+["Attabad Lake","lake",36.31,74.86,"Turquoise lake formed by a 2010 landslide on the Karakoram Highway. Boat rides available.","May to October"],
+["Passu Cones","nature",36.46,74.89,"Jagged peaks above the Passu Glacier, near the Hussaini suspension bridge.","May to October"],
+["Khunjerab Pass","pass",36.85,75.42,"Border crossing with China at about 4,700 m.","May to November"],
+["Sost","culture",36.69,74.82,"Border town on the Karakoram Highway, last major stop before Khunjerab.","May to November"],
+["Gilgit city","culture",35.92,74.31,"Regional hub for transport, markets and supplies. Kargah Buddha is nearby.","All year"],
+["Naltar Valley","nature",36.17,74.18,"Pine forests, colourful lakes and a ski slope near Gilgit.","June to September"],
+["Rakaposhi viewpoint","peak",36.14,74.49,"Close views of Rakaposhi (7,788 m) from the Karakoram Highway.","April to October"],
+["Fairy Meadows","lake",35.38,74.58,"Alpine meadow facing Nanga Parbat. Jeep track plus a short trek from Raikot.","May to September"],
+["Rama Lake and Meadow","lake",35.30,74.80,"Lake and forest in Astore with Nanga Parbat views.","June to September"],
+["Babusar Top","pass",35.15,74.05,"Mountain pass linking Gilgit-Baltistan with Kaghan Valley.","Late June to September"],
+["Phander Valley","lake",36.17,72.96,"Quiet trout lake and valley in Ghizer.","May to October"],
+["Shandur Pass","pass",36.08,72.55,"High polo ground at the edge of Ghizer, home of the annual polo festival.","June to August"],
+["Skardu","culture",35.30,75.63,"Gateway town for Baltistan, treks and expeditions.","April to October"],
+["Satpara Lake","lake",35.25,75.65,"Large lake close to Skardu.","April to October"],
+["Shangrila Resort","lake",35.34,75.43,"Lower Kachura Lake and a well-known resort near Skardu.","April to October"],
+["Shigar Fort","culture",35.43,75.74,"Restored Balti fort and heritage guesthouse in Shigar Valley.","April to October"],
+["Deosai National Park","nature",35.0,75.4,"High plateau about 4,100 m, known for wildflowers and Himalayan brown bears.","July to September"],
+["Khaplu Palace","culture",35.16,76.33,"Restored 19th-century palace and guesthouse beside the Shyok River.","April to October"],
+["K2 Base Camp via Concordia","peak",35.88,76.51,"Multi-day trek along the Baltoro Glacier to the foot of K2. Permit and guide required.","June to August"]
+];
+
+// ---- Map and basemaps (all free)
+var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'});
+var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap (CC-BY-SA)'});
+var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Tiles &copy; Esri'});
+var map = L.map('map',{layers:[topo]}).setView([35.9,74.9],8);
+L.control.layers({"Terrain (OpenTopoMap)":topo,"Streets (OpenStreetMap)":osm,"Satellite (Esri)":sat}).addTo(map);
+map.fitBounds([[34.7,72.4],[37.1,77.4]]);
+
+// ---- State
+var markers = [], myPos = null, myMarker = null, found = null, foundMarker = null, curCat = 'all';
+var $ = function(id){return document.getElementById(id)};
+function say(t,err){var m=$('msg');m.textContent=t;m.className=err?'err':''}
+
+// ---- Markers and popups
+PLACES.forEach(function(p,i){
+  var m = L.circleMarker([p[2],p[3]],{radius:8,color:'#fff',weight:2,fillColor:CATS[p[1]][1],fillOpacity:1}).addTo(map);
+  var box = document.createElement('div');
+  var h = document.createElement('strong'); h.textContent = p[0];
+  var d = document.createElement('div'); d.textContent = p[4];
+  var s = document.createElement('div'); s.style.cssText='color:#4d6166;font-size:.85em;margin-top:3px'; s.textContent = 'Best time: '+p[5];
+  var b1 = document.createElement('button'); b1.textContent = 'Directions to here';
+  var b2 = document.createElement('button'); b2.textContent = 'Directions from here';
+  b1.onclick = function(){ $('to').value = 'p'+i; if(!$('from').value) $('from').value='me'; routeNow(); map.closePopup(); };
+  b2.onclick = function(){ $('from').value = 'p'+i; if(!$('to').value) $('to').value='p'+(i===0?1:0); routeNow(); map.closePopup(); };
+  [h,d,s,b1,b2].forEach(function(e){box.appendChild(e)});
+  m.bindPopup(box);
+  markers.push(m);
+});
+
+// ---- Sidebar list, filters, dropdowns
+var listEl = $('list');
+PLACES.forEach(function(p,i){
+  var b = document.createElement('button'); b.className='item';
+  var dot = document.createElement('span'); dot.className='dot'; dot.style.background=CATS[p[1]][1];
+  var t = document.createElement('span'); t.textContent=p[0];
+  b.appendChild(dot); b.appendChild(t);
+  b.onclick = function(){ map.flyTo([p[2],p[3]],11); markers[i].openPopup(); };
+  listEl.appendChild(b);
+});
+function addCat(k,label){
+  var b=document.createElement('button'); b.textContent=label; b.dataset.k=k;
+  b.onclick=function(){curCat=k;applyFilter()}; $('cats').appendChild(b);
+}
+addCat('all','All'); for(var k in CATS) addCat(k,CATS[k][0]);
+function applyFilter(){
+  var q = $('q').value.trim().toLowerCase();
+  Array.prototype.forEach.call($('cats').children,function(b){b.className=(b.dataset.k===curCat)?'on':''});
+  PLACES.forEach(function(p,i){
+    var on = (curCat==='all'||p[1]===curCat) && (!q || p[0].toLowerCase().indexOf(q)>-1);
+    listEl.children[i].style.display = on?'':'none';
+    if(on){ if(!map.hasLayer(markers[i])) markers[i].addTo(map); } else map.removeLayer(markers[i]);
+  });
+}
+$('q').addEventListener('input',applyFilter);
+applyFilter();
+
+function fillSelect(sel,first){
+  sel.innerHTML='';
+  var o=document.createElement('option'); o.value=''; o.textContent=first; sel.appendChild(o);
+  var me=document.createElement('option'); me.value='me'; me.textContent='My current location'; sel.appendChild(me);
+  PLACES.forEach(function(p,i){var x=document.createElement('option'); x.value='p'+i; x.textContent=p[0]; sel.appendChild(x)});
+  if(found){var f=document.createElement('option'); f.value='found'; f.textContent='Searched: '+found.name; sel.appendChild(f)}
+}
+fillSelect($('from'),'Choose start'); fillSelect($('to'),'Choose destination');
+
+// ---- Search the wider map (Nominatim, limited to Gilgit-Baltistan area)
+$('q').addEventListener('keydown',function(e){
+  if(e.key!=='Enter') return;
+  var q=$('q').value.trim(); if(!q) return;
+  say('Searching...');
+  var url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pk&viewbox=72.3,37.2,77.9,34.4&bounded=1&q='+encodeURIComponent(q);
+  fetch(url).then(function(r){return r.json()}).then(function(res){
+    if(!res.length){say('No match found in Gilgit-Baltistan. Try another spelling.',true);return}
+    var r=res[0], ll=L.latLng(+r.lat,+r.lon);
+    found={name:r.display_name.split(',')[0],ll:ll};
+    if(foundMarker) map.removeLayer(foundMarker);
+    foundMarker=L.marker(ll).addTo(map).bindPopup(r.display_name).openPopup();
+    map.flyTo(ll,12);
+    var f=$('from').value,t=$('to').value;
+    fillSelect($('from'),'Choose start'); fillSelect($('to'),'Choose destination');
+    $('from').value=f; $('to').value=t;
+    say('Found: '+found.name+'. It is now available as a route start or destination.');
+  }).catch(function(){say('Search failed. Check your internet connection.',true)});
+});
+
+// ---- Routing (OSRM public demo server, driving profile)
+var router = L.Routing.control({
+  waypoints:[], show:false, addWaypoints:false, routeWhileDragging:false, fitSelectedRoutes:true,
+  router:L.Routing.osrmv1({serviceUrl:'https://router.project-osrm.org/route/v1',profile:'driving'}),
+  lineOptions:{styles:[{color:'#c23b3b',weight:5,opacity:.85}]},
+  createMarker:function(){return null}
+}).addTo(map);
+router.on('routesfound',function(e){
+  var s=e.routes[0].summary, km=(s.totalDistance/1000).toFixed(0), h=Math.floor(s.totalTime/3600), m=Math.round((s.totalTime%3600)/60);
+  say('Driving route: about '+km+' km, '+(h?h+' h ':'')+m+' min. Mountain roads and seasonal closures can make real travel longer.');
+});
+router.on('routingerror',function(){say('No route found. The roads may be missing from the map data, or the routing server is busy.',true)});
+
+function getPoint(v){
+  if(v==='me') return myPos;
+  if(v==='found') return found && found.ll;
+  if(v&&v[0]==='p'){var p=PLACES[+v.slice(1)]; return L.latLng(p[2],p[3])}
+  return null;
+}
+function locate(cb){
+  if(myPos) return cb();
+  if(!navigator.geolocation){say('Location is not supported in this browser.',true);return}
+  say('Finding your location...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    myPos=L.latLng(pos.coords.latitude,pos.coords.longitude);
+    myMarker=L.circleMarker(myPos,{radius:7,color:'#fff',weight:2,fillColor:'#1a73e8',fillOpacity:1}).addTo(map).bindTooltip('You are here');
+    cb();
+  },function(){say('Could not get your location. Allow location access (the page must be served over HTTPS).',true)},{enableHighAccuracy:true,timeout:15000});
+}
+function routeNow(){
+  var f=$('from').value,t=$('to').value;
+  if(!f||!t){say('Choose both a start and a destination.',true);return}
+  if(f===t){say('Start and destination are the same.',true);return}
+  function run(){
+    var a=getPoint(f),b=getPoint(t);
+    if(!a||!b){say('Could not resolve one of the points.',true);return}
+    say('Calculating route...'); router.setWaypoints([a,b]);
+  }
+  if(f==='me'||t==='me') locate(run); else run();
+}
+$('go').onclick=routeNow;
+$('clr').onclick=function(){router.setWaypoints([]);say('');};
+</script>
+</body>
+</html>
